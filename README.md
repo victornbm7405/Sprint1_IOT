@@ -1,124 +1,141 @@
+# 🚀 Sprint 3 Telemetria
 
-# API de Gestão de Motos com QR Code — Projeto IOT
+---
 
-CRUD completo de Motos e Áreas com conexão ao banco Oracle.
+## 📖 Proposta do Projeto
+Este projeto foi desenvolvido como parte da disciplina **Disruptive Architectures: IoT, IoB & Generative AI**.  
+A proposta é criar uma infraestrutura IoT para **gerenciamento de motos**, com **leitura de QR Code**, **telemetria em tempo real** e **dashboard interativo**.
 
-- Cadastro de motos via leitura de QR Code com dados em JSON.
-- As motos são vinculadas a uma área (ex.: Norte, Sul, Leste...).
-- Gerenciamento completo de Motos.
-- Gerenciamento completo de Áreas.
+O sistema é composto por:
+- **Simuladores IoT** → publicam dados de telemetria (temperatura, vibração, bateria).  
+- **Subscriber MQTT** → recebe os dados e armazena no banco Oracle ou em CSV (fallback).  
+- **API REST (FastAPI)** → expõe endpoints para consulta, CRUD de motos/áreas, comandos e detecções.  
+- **Dashboard Web** → exibe dados de telemetria em tempo real (gráfico interativo com Chart.js).  
 
-## Tecnologias
-- Python + FastAPI
-- Banco de Dados Oracle
-- OpenCV + Pyzbar (Leitor de QR Code)
-- Uvicorn (Servidor ASGI)
+---
 
-## Banco de Dados
-
-### Tabelas:
-
-### T_IOT_AREA
-| Campo    | Tipo       | Descrição     |
-|----------|------------|----------------|
-| ID_AREA  | NUMBER (PK)| ID da área     |
-| NM_AREA  | VARCHAR2   | Nome da área   |
-
-### T_IOT_MOTO
-| Campo     | Tipo        | Descrição                       |
-|-----------|-------------|----------------------------------|
-| ID_MOTO   | NUMBER (PK) | ID da moto                      |
-| DS_PLACA  | VARCHAR2    | Placa da moto                   |
-| NM_MODELO | VARCHAR2    | Modelo da moto                  |
-| ID_AREA   | NUMBER (FK) | Área relacionada (T_IOT_AREA)   |
-
-## Criação das tabelas
-```sql
-CREATE TABLE T_IOT_AREA (
-    ID_AREA NUMBER PRIMARY KEY,
-    NM_AREA VARCHAR2(100) NOT NULL
-);
-
-CREATE TABLE T_IOT_MOTO (
-    ID_MOTO NUMBER PRIMARY KEY,
-    DS_PLACA VARCHAR2(20) NOT NULL,
-    NM_MODELO VARCHAR2(100) NOT NULL,
-    ID_AREA NUMBER NOT NULL,
-    CONSTRAINT FK_IOT_MOTO_AREA FOREIGN KEY (ID_AREA)
-        REFERENCES T_IOT_AREA (ID_AREA)
-);
+## 📂 Estrutura do Projeto
+```
+Sprint1_IOT-main/
+│── main.py              # API principal (FastAPI + Dashboard)
+│── config.py            # Configurações (.env → Oracle/MQTT)
+│── persistence.py       # Persistência (Oracle → CSV fallback)
+│── leitor_qrcode.py     # Leitura de QR Code com OpenCV
+│── teste_conexao.py     # Teste de conexão ao Oracle
+│── requirements.txt     # Dependências do projeto
+│── .env / .env.example  # Variáveis de ambiente
+│
+├── services/
+│   └── mqtt_subscriber.py   # Subscriber MQTT
+│
+├── iot/
+│   ├── simulator1.py        # Simulador IoT (telemetria)
+│   ├── simulator2.py
+│   └── simulator3.py
+│
+├── data/                # CSVs de fallback
+│   ├── telemetria.csv
+│   ├── acionamento.csv
+│   └── deteccao.csv
 ```
 
-## Rodando o projeto
+---
 
-### Instalar as dependências:
-```bash
+## 🛠️ Tecnologias Utilizadas
+- **Python 3.10+**
+- **FastAPI** (framework backend / API REST)
+- **Uvicorn** (servidor ASGI)
+- **Pydantic** (validação de dados)
+- **OpenCV + pyzbar** (leitura de QR Codes)
+- **paho-mqtt** (comunicação MQTT)
+- **cx_Oracle** (integração com banco Oracle)
+- **Chart.js** (gráficos no dashboard web)
+- **CSV** (fallback de persistência local)
+
+---
+
+## ⚙️ Passo a Passo para Rodar
+
+### 1) Clonar repositório
+```powershell
+git clone https://github.com/SEU-USUARIO/SEU-REPO.git
+cd Sprint1_IOT-main
+```
+
+### 2) Criar ambiente virtual e instalar dependências
+```powershell
 pip install -r requirements.txt
 ```
 
-### Rodar a API:
-```bash
+### 3) Configurar variáveis de ambiente
+Copiar o arquivo `.env.example` para `.env` e preencher as variáveis do Oracle/MQTT:
+```powershell
+copy .env.example .env
+```
+
+### 4) Rodar o subscriber MQTT
+```powershell
+python -m services.mqtt_subscriber
+```
+
+### 5) Rodar os simuladores IoT
+Em 3 terminais diferentes:
+```powershell
+python iot/simulator1.py
+python iot/simulator2.py
+python iot/simulator3.py
+```
+
+### 6) Rodar a API principal
+```powershell
 uvicorn main:app --reload
 ```
 
-### Acessar a documentação:
-```
-http://127.0.0.1:8000/docs
-```
+### 7) Acessar no navegador
+- Swagger Docs → http://127.0.0.1:8000/docs  
+- Dashboard → http://127.0.0.1:8000/dashboard  
 
-## Funcionamento do QR Code
+---
 
-O QR Code deve conter um JSON no seguinte formato:
-```json
+## Exemplo de JSONS
+
+-Endpoint: POST /deteccoes
 {
-  "placa": "XYZ1234",
-  "modelo": "Honda CG",
-  "area": 1
+  "source": "yolo",
+  "label": "capacete",
+  "conf": 0.95,
+  "x": 100,
+  "y": 150,
+  "w": 80,
+  "h": 80,
+  "frame_id": 12,
+  "id_moto": 1,
+  "region": "Zona Norte"
 }
-```
-- placa: Placa da moto.
-- modelo: Modelo da moto.
-- area: ID da área existente no banco (T_IOT_AREA).
 
-Entre nesse site para gerar um qrcode
+Endpoint: POST /commands
+{
+  "id_moto": 1,
+  "kind": "lock",
+  "reason": "Trava de segurança acionada remotamente"
+}
 
 
- https://www.qr-code-generator.com/
 
-## Endpoints disponíveis
+## 📊 Resultados Parciais
+- Os simuladores publicam telemetria em tópicos MQTT.  
+- O subscriber recebe e persiste os dados em **Oracle** (quando disponível) ou em **CSVs** de fallback:  
+  - `data/telemetria.csv` → leituras de sensores  
+  - `data/acionamento.csv` → comandos  
+  - `data/deteccao.csv` → eventos de visão computacional  
+- O dashboard exibe gráficos interativos de temperatura em tempo real.  
+- O Swagger permite testar endpoints para CRUD, telemetria, comandos e detecções.
 
-### Motos
-| Método | Rota             | Descrição                              |
-|--------|------------------|----------------------------------------|
-| GET    | /motos           | Listar todas as motos                 |
-| POST   | /motos/qrcode    | Cadastrar moto via QR Code            |
-| PUT    | /motos/{id}      | Atualizar dados da moto               |
-| DELETE | /motos/{id}      | Deletar moto                          |
+---
 
-### Áreas
-| Método | Rota             | Descrição                              |
-|--------|------------------|----------------------------------------|
-| GET    | /areas           | Listar todas as áreas                 |
-| POST   | /areas           | Cadastrar uma nova área               |
-| PUT    | /areas/{id}      | Atualizar uma área                    |
-| DELETE | /areas/{id}      | Deletar uma área                      |
+## 👨‍💻 Integrantes
 
-## Requisitos
-- Oracle Instant Client instalado e configurado no Path.
-- Banco de dados Oracle acessível.
-- Webcam funcionando para leitura do QR Code.
-
-## Observações importantes
-- A área (area) deve existir no banco antes de cadastrar uma moto.
-- Caso não exista, use o CRUD de áreas para criar.
-- A câmera fecha automaticamente após ler o QR Code.
-
-## Status
-Projeto finalizado, funcional, conectado ao banco, com leitura de QR Code e CRUD completo para Motos e Áreas.
-
-##  Desenvolvido por:
-RM 556293 Alice Teixeira Caldeira  
-RM 555708 Gustavo Goulart
+Desenvolvido por: 
+RM 556293 Alice Teixeira Caldeira 
+RM 555708 Gustavo Goulart 
 RM 554557 Victor Medeiros
-
-
