@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import json
@@ -22,6 +23,16 @@ from persistence import (
 
 app = FastAPI(title="IOT + QR + Telemetria (Sprint 3)")
 
+# -------------------------------------------------------
+# Habilitar CORS para Swagger e outros clientes
+# -------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # permite todas as origens
+    allow_credentials=True,
+    allow_methods=["*"],   # permite todos os métodos (GET, POST, PUT, DELETE)
+    allow_headers=["*"],   # permite todos os headers
+)
 
 # -------------------------------------------------------
 # Utilitário de conexão por requisição
@@ -29,7 +40,6 @@ app = FastAPI(title="IOT + QR + Telemetria (Sprint 3)")
 def get_connection():
     """Abre uma conexão nova com Oracle usando variáveis do .env."""
     return cx_Oracle.connect(user=ORACLE_USER, password=ORACLE_PWD, dsn=ORACLE_DSN)
-
 
 # -------------------------------------------------------
 # Modelos existentes (tabelas T_IOT_*)
@@ -40,11 +50,9 @@ class Moto(BaseModel):
     modelo: str
     area: int
 
-
 class Area(BaseModel):
     id: int
     nome: str
-
 
 # -------------------------------------------------------
 # Sprint 3 — Modelos IoT adicionais
@@ -55,12 +63,10 @@ class TelemetryIn(BaseModel):
     vib: float
     batt_pct: float
 
-
 class CommandIn(BaseModel):
     id_moto: int = Field(..., ge=1)
     kind: str  # lock, unlock, horn, led_on, led_off
     reason: Optional[str] = None
-
 
 class DetectionIn(BaseModel):
     source: str  # yolo, aruco, qr, etc.
@@ -73,7 +79,6 @@ class DetectionIn(BaseModel):
     frame_id: Optional[int] = None
     id_moto: Optional[int] = None
     region: Optional[str] = None
-
 
 # -------------------------------------------------------
 # CRUD — MOTOS (T_IOT_MOTO)
@@ -90,7 +95,6 @@ def listar_motos():
     except Exception as e:
         print(f"❌ Erro no GET de motos: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/motos/qrcode", response_model=Moto)
 def cadastrar_moto_qrcode():
@@ -152,7 +156,6 @@ def cadastrar_moto_qrcode():
     finally:
         cur.close(); conn.close()
 
-
 @app.put("/motos/{id}", response_model=Moto)
 def atualizar_moto(id: int, moto: Moto):
     conn = get_connection()
@@ -183,7 +186,6 @@ def atualizar_moto(id: int, moto: Moto):
     finally:
         cur.close(); conn.close()
 
-
 @app.delete("/motos/{id}")
 def deletar_moto(id: int):
     conn = get_connection()
@@ -205,7 +207,6 @@ def deletar_moto(id: int):
     finally:
         cur.close(); conn.close()
 
-
 # -------------------------------------------------------
 # CRUD — ÁREAS (T_IOT_AREA)
 # -------------------------------------------------------
@@ -221,7 +222,6 @@ def listar_areas():
     except Exception as e:
         print(f"❌ Erro no GET de áreas: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/areas", response_model=Area)
 def cadastrar_area(area: Area):
@@ -247,7 +247,6 @@ def cadastrar_area(area: Area):
     finally:
         cur.close(); conn.close()
 
-
 @app.put("/areas/{id}", response_model=Area)
 def atualizar_area(id: int, area: Area):
     conn = get_connection()
@@ -272,7 +271,6 @@ def atualizar_area(id: int, area: Area):
     finally:
         cur.close(); conn.close()
 
-
 @app.delete("/areas/{id}")
 def deletar_area(id: int):
     conn = get_connection()
@@ -294,13 +292,11 @@ def deletar_area(id: int):
     finally:
         cur.close(); conn.close()
 
-
 # -------------------------------------------------------
 # Sprint 3 — Telemetria (T_IOT_TELEMETRIA) com fallback
 # -------------------------------------------------------
 @app.post("/telemetria", status_code=201)
 def publicar_telemetria(payload: TelemetryIn):
-    # tenta Oracle; se falhar (ex.: ORA-28000), grava em CSV
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -313,7 +309,6 @@ def publicar_telemetria(payload: TelemetryIn):
         new_id = save_telemetria_file(payload)
         return {"id": new_id, "ok": True, "backend": "file"}
 
-
 @app.get("/telemetria")
 def listar_telemetria(limit: int = 50):
     try:
@@ -325,7 +320,6 @@ def listar_telemetria(limit: int = 50):
     except Exception as e:
         print("GET /telemetria: lendo de arquivo ->", e)
         return {"backend": "file", "items": list_telemetria_file(limit)}
-
 
 # -------------------------------------------------------
 # Sprint 3 — Comandos / Atuadores (T_IOT_ACIONAMENTO) com fallback
@@ -344,7 +338,6 @@ def acionar(payload: CommandIn):
         new_id = save_command_file(payload)
         used_backend = "file"
 
-    # Publica também no MQTT para os simuladores/atuadores
     try:
         import paho.mqtt.client as mqtt
         client = mqtt.Client()
@@ -363,7 +356,6 @@ def acionar(payload: CommandIn):
 
     return {"id": new_id, "ok": True, "backend": used_backend}
 
-
 # -------------------------------------------------------
 # Sprint 3 — Detecções de Visão (T_IOT_DETECCAO) com fallback
 # -------------------------------------------------------
@@ -381,9 +373,8 @@ def registrar_deteccao(payload: DetectionIn):
         new_id = save_detection_file(payload)
         return {"id": new_id, "ok": True, "backend": "file"}
 
-
 # -------------------------------------------------------
-# Inicia o subscriber MQTT em background (uma única vez)
+# Inicia o subscriber MQTT em background
 # -------------------------------------------------------
 try:
     if not getattr(app.state, "_mqtt_started", False):
@@ -394,9 +385,8 @@ try:
 except Exception as e:
     print("MQTT indisponível:", e)
 
-
 # -------------------------------------------------------
-# Dashboard simples (HTML) em /dashboard
+# Dashboard estilizado em /dashboard
 # -------------------------------------------------------
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
@@ -407,54 +397,43 @@ def dashboard():
   <meta charset="utf-8"/>
   <title>Dashboard – Telemetria</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:24px;}
-    h1{margin:0 0 8px}
-    .badge{display:inline-block;padding:4px 8px;border-radius:8px;background:#eee;margin-left:8px;font-size:12px}
-    table{border-collapse:collapse;width:100%;margin-top:12px}
-    th,td{border:1px solid #ddd;padding:8px;font-size:14px}
-    th{background:#f8f8f8;text-align:left}
-    .err{color:#c00}
+    body{font-family:Arial,Helvetica,sans-serif;margin:20px;background:#f9fafb;color:#111827}
+    h1{color:#2563eb;text-align:center}
+    .card{margin:auto;padding:20px;max-width:900px;background:#fff;border-radius:12px;box-shadow:0 4px 8px rgba(0,0,0,0.1)}
+    canvas{margin-top:20px}
   </style>
 </head>
 <body>
-  <h1>Telemetria <span id="backend" class="badge">—</span></h1>
-  <div id="meta" style="margin:6px 0 14px;color:#666;font-size:13px">atualizando...</div>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th><th>Moto</th><th>Temp (°C)</th><th>Vib</th><th>Bateria (%)</th><th>Timestamp</th>
-      </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
-  </table>
-
+  <div class="card">
+    <h1>📊 Dashboard de Telemetria</h1>
+    <canvas id="grafico"></canvas>
+  </div>
   <script>
     async function fetchData(){
-      try{
-        const r = await fetch('/telemetria?limit=20');
-        const data = await r.json();
-        document.getElementById('backend').textContent = 'backend: ' + (data.backend || '?');
-        const tb = document.getElementById('tbody');
-        tb.innerHTML = '';
-        (data.items || []).forEach(it => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${it.id}</td>
-            <td>${it.id_moto}</td>
-            <td>${(+it.temp_c).toFixed(2)}</td>
-            <td>${(+it.vib).toFixed(3)}</td>
-            <td>${(+it.batt_pct).toFixed(1)}</td>
-            <td>${it.ts || ''}</td>`;
-          tb.appendChild(tr);
-        });
-        document.getElementById('meta').textContent = 'Leituras: ' + (data.items?.length || 0) + ' • ' + new Date().toLocaleTimeString();
-      }catch(e){
-        document.getElementById('meta').innerHTML = '<span class="err">erro ao carregar</span>';
-      }
+      const r = await fetch('/telemetria?limit=20');
+      const data = await r.json();
+      const labels = data.items.map((_,i)=>i+1);
+      const valores = data.items.map(it => it.temp_c);
+      const ctx = document.getElementById('grafico').getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Temperatura (°C)',
+            data: valores,
+            borderColor: 'rgb(37,99,235)',
+            backgroundColor: 'rgba(37,99,235,0.2)',
+            fill: true,
+            tension: 0.25
+          }]
+        }
+      });
     }
     fetchData();
-    setInterval(fetchData, 2000);
+    setInterval(fetchData, 5000);
   </script>
 </body>
 </html>
