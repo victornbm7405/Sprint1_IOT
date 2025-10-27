@@ -399,10 +399,22 @@ def dashboard():
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;margin:20px;background:#f9fafb;color:#111827}
-    h1{color:#2563eb;text-align:center}
-    .card{margin:auto;padding:20px;max-width:900px;background:#fff;border-radius:12px;box-shadow:0 4px 8px rgba(0,0,0,0.1)}
+    :root{--card-bg:#fff;--text:#111827;--muted:#374151;--accent:#2563eb;--border:#e5e7eb}
+    body{font-family:Arial,Helvetica,sans-serif;margin:20px;background:#f9fafb;color:var(--text)}
+    h1,h2{margin:0 0 12px 0}
+    h1{color:var(--accent);text-align:center}
+    .card{margin:auto;padding:20px;max-width:1000px;background:var(--card-bg);border-radius:12px;box-shadow:0 4px 8px rgba(0,0,0,0.1)}
     canvas{margin-top:20px}
+    /* Patio */
+    #alert-center{display:none;border:1px solid #f2c46d;background:#fff9e6;color:#7a4c00;padding:12px;border-radius:8px;margin:0 0 12px 0}
+    #moto-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+    .moto-card{border:1px solid var(--border);border-radius:12px;padding:12px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+    .moto-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .pill{padding:2px 8px;border-radius:999px;font:500 12px/1 system-ui;border:1px solid transparent}
+    .pill.use{background:#e6f4ff;color:#084d86;border-color:#bfe1ff}
+    .pill.stop{background:#edf7ed;color:#0b5e0b;border-color:#cfe9cf}
+    .pill.maint{background:#fff2f0;color:#8a1f11;border-color:#ffd8d3}
+    .muted{font:400 13px/1.5 system-ui;color:var(--muted)}
   </style>
 </head>
 <body>
@@ -410,30 +422,173 @@ def dashboard():
     <h1>📊 Dashboard de Telemetria</h1>
     <canvas id="grafico"></canvas>
   </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2 style="font:600 20px/1.2 system-ui">Visão do Pátio</h2>
+    <div id="alert-center" aria-live="polite"></div>
+    <div id="moto-grid"></div>
+  </div>
+
   <script>
-    async function fetchData(){
-      const r = await fetch('/telemetria?limit=20');
-      const data = await r.json();
-      const labels = data.items.map((_,i)=>i+1);
-      const valores = data.items.map(it => it.temp_c);
-      const ctx = document.getElementById('grafico').getContext('2d');
-      new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Temperatura (°C)',
-            data: valores,
-            borderColor: 'rgb(37,99,235)',
-            backgroundColor: 'rgba(37,99,235,0.2)',
-            fill: true,
-            tension: 0.25
-          }]
+    // ==========================
+    // GRÁFICO: atualiza sem recriar
+    // ==========================
+    let chart;
+    async function fetchChart() {
+      try {
+        const r = await fetch('/telemetria?limit=20');
+        const data = await r.json();
+        const items = Array.isArray(data) ? data : (data.items || []);
+        const labels = items.map((_, i) => i + 1);
+        const valores = items.map(it => it.temp_c);
+
+        const ctx = document.getElementById('grafico').getContext('2d');
+        if (!chart) {
+          chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: 'Temperatura (°C)',
+                data: valores,
+                borderColor: 'rgb(37,99,235)',
+                backgroundColor: 'rgba(37,99,235,0.2)',
+                fill: true,
+                tension: 0.25
+              }]
+            },
+            options: {animation:false,responsive:true,maintainAspectRatio:true}
+          });
+        } else {
+          chart.data.labels = labels;
+          chart.data.datasets[0].data = valores;
+          chart.update('none');
         }
-      });
+      } catch (e) {
+        console.warn('Falha ao atualizar gráfico:', e);
+      }
     }
-    fetchData();
-    setInterval(fetchData, 5000);
+    fetchChart();
+    setInterval(fetchChart, 5000);
+
+    // ==========================
+    // VISÃO DE PÁTIO (status+alertas)
+    // ==========================
+    const CANDIDATE_ENDPOINTS = [
+      "/telemetria?limit=200",
+      "/telemetria/ultimas?limit=200",
+      "/telemetria/live?limit=200"
+    ];
+    const POLL_MS = 5000;
+    const TH = { TEMP_ALTA: 60, BATT_BAIXA: 30, VIB_USO: 1.0 };
+
+    function calcStatus(t) {
+      if ((t.batt_pct ?? 100) < TH.BATT_BAIXA || (t.temp_c ?? 0) > TH.TEMP_ALTA) return "manutenção";
+      if ((t.vib ?? 0) > TH.VIB_USO) return "em uso";
+      return "parada";
+    }
+    function calcAlerts(t) {
+      const a = [];
+      if ((t.batt_pct ?? 100) < TH.BATT_BAIXA) a.push(`Bateria baixa (${t.batt_pct}%)`);
+      if ((t.temp_c ?? 0) > TH.TEMP_ALTA) a.push(`Temperatura alta (${t.temp_c}°C)`);
+      return a;
+    }
+    function fmtTs(ts) {
+      try { return new Date(ts).toLocaleString(); } catch { return ts || ""; }
+    }
+    function pickRegion(t) {
+      if (t.region) return t.region;
+      const id = Number(t.id_moto || t.id || 0);
+      return ["Pátio A","Pátio B","Pátio C"][id % 3];
+    }
+    function latestByMoto(list) {
+      const map = new Map();
+      for (const x of list) {
+        const id = x.id_moto ?? x.id ?? x.motoId ?? x.moto_id;
+        if (id == null) continue;
+        const prev = map.get(id);
+        const tsX = new Date(x.ts || x.timestamp || 0).getTime();
+        const tsPrev = prev ? new Date(prev.ts || prev.timestamp || 0).getTime() : -1;
+        if (!prev || tsX >= tsPrev) map.set(id, x);
+      }
+      return Array.from(map, ([id, v]) => ({ id_moto: id, ...v }));
+    }
+    async function fetchAny(urls) {
+      for (const u of urls) {
+        try {
+          const r = await fetch(u);
+          if (!r.ok) continue;
+          const j = await r.json();
+          return j;
+        } catch {}
+      }
+      throw new Error("Nenhum endpoint de telemetria respondeu.");
+    }
+    function normalizeList(raw) {
+      const arr = Array.isArray(raw) ? raw : (raw?.items || raw?.data || []);
+      return arr.map(x => ({
+        id_moto: x.id_moto ?? x.id ?? x.motoId ?? x.moto_id,
+        temp_c: x.temp_c ?? x.temp ?? x.temperatura,
+        vib: x.vib ?? x.vibracao ?? x.vibration,
+        batt_pct: x.batt_pct ?? x.bateria ?? x.battery_pct ?? x.battery,
+        ts: x.ts ?? x.timestamp ?? x.datahora ?? x.time,
+        region: x.region ?? x.patio ?? x.setor
+      })).filter(x => x.id_moto != null);
+    }
+    function statusPill(s) {
+      const cls = s === "em uso" ? "pill use" : (s === "parada" ? "pill stop" : "pill maint");
+      return `<span class="${cls}">${s}</span>`;
+    }
+    function renderCards(latest) {
+      const grid = document.getElementById("moto-grid");
+      grid.innerHTML = latest.map(t => {
+        const s = calcStatus(t);
+        const alerts = calcAlerts(t);
+        const region = pickRegion(t);
+        return `
+          <div class="moto-card">
+            <div class="moto-head">
+              <div style="font:600 16px/1.2 system-ui">Moto #${t.id_moto}</div>
+              ${statusPill(s)}
+            </div>
+            <div class="muted">
+              <div><strong>Região:</strong> ${region}</div>
+              <div><strong>Bateria:</strong> ${t.batt_pct ?? "—"}%</div>
+              <div><strong>Temp:</strong> ${t.temp_c ?? "—"}°C</div>
+              <div><strong>Vib:</strong> ${t.vib ?? "—"}</div>
+              <div><strong>Atualizado:</strong> ${fmtTs(t.ts)}</div>
+            </div>
+            ${alerts.length ? `<div style="margin-top:8px;font:500 12px/1.5 system-ui;color:#7a1a0a">
+                ${alerts.map(a => `• ${a}`).join("<br>")}
+              </div>` : ``}
+          </div>
+        `;
+      }).join("");
+    }
+    function renderAlertCenter(latest) {
+      const allAlerts = latest.flatMap(t => calcAlerts(t).map(msg => ({ id: t.id_moto, msg })));
+      const box = document.getElementById("alert-center");
+      if (!allAlerts.length) {
+        box.style.display = "none";
+        box.innerHTML = "";
+        return;
+      }
+      box.style.display = "block";
+      box.innerHTML = `<strong>Alertas em tempo real</strong><br>${allAlerts.map(a => `Moto #${a.id}: ${a.msg}`).join("<br>")}`;
+    }
+    async function tickPatio() {
+      try {
+        const raw = await fetchAny(CANDIDATE_ENDPOINTS);
+        const norm = normalizeList(raw);
+        const latest = latestByMoto(norm);
+        renderCards(latest);
+        renderAlertCenter(latest);
+      } catch (e) {
+        console.warn("Falha ao atualizar visão de pátio:", e.message);
+      }
+    }
+    tickPatio();
+    setInterval(tickPatio, POLL_MS);
   </script>
 </body>
 </html>
