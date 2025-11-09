@@ -2,3 +2,4 @@ id,source,label,conf,x,y,w,h,frame_id,id_moto,region,ts
 1,yolo,moto,0.92,100,120,80,60,1,1,patio,2025-09-28 13:46:24
 2,yolo,moto,0.9,120,100,80,60,42,1,patio,2025-09-28 13:57:18
 3,yolo,capacete,0.95,100,150,80,80,12,1,Zona Norte,2025-10-01 22:04:58
+4,string,string,0.0,0,0,0,0,0,0,string,2025-11-09 05:16:50

@@ -4,3 +4,6 @@ id,id_moto,kind,reason,ts
 3,1,lock,teste sprint,2025-09-28 13:56:54
 4,1,lock,Trava de segurança acionada remotamente,2025-10-01 22:04:20
 5,1,lock,Trava de segurança acionada remotamente,2025-10-01 22:04:21
+6,1,string,string,2025-11-09 04:57:18
+7,1,string,string,2025-11-09 04:57:18
+8,1,string,striing,2025-11-09 05:16:39
