@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+opencv-python
+pyzbar
+python-dotenv
+paho-mqtt
