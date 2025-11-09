@@ -1,4 +1,4 @@
-# 🚀 Sprint 3 Telemetria
+# 🚀 Sprint 4 Telemetria
 
 ---
 
@@ -29,9 +29,9 @@ Sprint1_IOT-main/
 │   └── mqtt_subscriber.py   # Subscriber MQTT
 │
 ├── iot/
-│   ├── simulator1.py        # Simulador IoT (telemetria)
-│   ├── simulator2.py
-│   └── simulator3.py
+│   ├── simulator_base.py        # Simulador IoT (telemetria)
+│   ├── simulator_all.py
+│   
 │
 ├── data/                # CSVs de fallback
 │   ├── telemetria.csv
@@ -79,11 +79,10 @@ python -m services.mqtt_subscriber
 ```
 
 ### 5) Rodar os simuladores IoT
-Em 3 terminais diferentes:
+Em 1 terminal diferente:
 ```powershell
-python iot/simulator1.py
-python iot/simulator2.py
-python iot/simulator3.py
+python iot/simulator_all.py
+
 ```
 
 ### 6) Rodar a API principal
