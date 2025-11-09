@@ -1,0 +1,5 @@
+# Ignorar arquivos temporários e dados
+__pycache__/
+.venv/
+data/*.csv
+.env
